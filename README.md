@@ -6,6 +6,7 @@
 ```javascript
 var Speakerphone = require("ti.speakerphone");
 Speakerphone.toogleSpeakerphone();
+```
 
 ## Methods
 

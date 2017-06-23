@@ -1,0 +1,16 @@
+%define lookup-function-name lookupGeneratedInit
+%define class-name SpeakerphoneBindings
+%{
+
+#include <string.h>
+#include <v8.h>
+#include <KrollBindings.h>
+
+#include "ti.speakerphone.SpeakerphoneModule.h"
+
+
+%}
+struct titanium::bindings::BindEntry;
+%%
+ti.speakerphone.SpeakerphoneModule, ::ti::speakerphone::SpeakerphoneModule::bindProxy, ::ti::speakerphone::SpeakerphoneModule::dispose
+%%

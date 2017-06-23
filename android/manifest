@@ -2,9 +2,9 @@
 # this is your module manifest and used by Titanium
 # during compilation, packaging, distribution, etc.
 #
-version: 1.0.0
-apiversion: 3
-architectures: armeabi-v7a x86
+version: 0.0.5
+apiversion: 2
+architectures: armeabi armeabi-v7a x86
 description: speakerphone
 author: Rainer Knöterich
 license: Specify your license
@@ -15,4 +15,4 @@ name: speakerphone
 moduleid: ti.speakerphone
 guid: 477efe5a-e4a0-4853-9400-8f83a8107340
 platform: android
-minsdk: 6.0.1.GA
+minsdk: 5.0.1.GA

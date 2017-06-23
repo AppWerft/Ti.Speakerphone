@@ -1,6 +1,6 @@
 /**
  * Appcelerator Titanium Mobile
- * Copyright (c) 2011-2016 by Appcelerator, Inc. All Rights Reserved.
+ * Copyright (c) 2011-2013 by Appcelerator, Inc. All Rights Reserved.
  * Licensed under the terms of the Apache Public License
  * Please see the LICENSE included with this distribution for details.
  */
@@ -27,69 +27,73 @@
 
 using namespace v8;
 
-namespace ti {
-namespace speakerphone {
+		namespace ti {
+		namespace speakerphone {
 
 
-Persistent<FunctionTemplate> SpeakerphoneModule::proxyTemplate;
+Persistent<FunctionTemplate> SpeakerphoneModule::proxyTemplate = Persistent<FunctionTemplate>();
 jclass SpeakerphoneModule::javaClass = NULL;
 
 SpeakerphoneModule::SpeakerphoneModule(jobject javaObject) : titanium::Proxy(javaObject)
 {
 }
 
-void SpeakerphoneModule::bindProxy(Local<Object> exports, Local<Context> context)
+void SpeakerphoneModule::bindProxy(Handle<Object> exports)
 {
-	Isolate* isolate = context->GetIsolate();
+	if (proxyTemplate.IsEmpty()) {
+		getProxyTemplate();
+	}
 
-	Local<FunctionTemplate> pt = getProxyTemplate(isolate);
-	Local<Function> proxyConstructor = pt->GetFunction(context).ToLocalChecked();
-	Local<String> nameSymbol = NEW_SYMBOL(isolate, "Speakerphone"); // use symbol over string for efficiency
-	Local<Object> moduleInstance = proxyConstructor->NewInstance(context).ToLocalChecked();
+	// use symbol over string for efficiency
+	Handle<String> nameSymbol = String::NewSymbol("Speakerphone");
+
+	Local<Function> proxyConstructor = proxyTemplate->GetFunction();
+	Local<Object> moduleInstance = proxyConstructor->NewInstance();
 	exports->Set(nameSymbol, moduleInstance);
 }
 
-void SpeakerphoneModule::dispose(Isolate* isolate)
+void SpeakerphoneModule::dispose()
 {
 	LOGD(TAG, "dispose()");
 	if (!proxyTemplate.IsEmpty()) {
-		proxyTemplate.Reset();
+		proxyTemplate.Dispose();
+		proxyTemplate = Persistent<FunctionTemplate>();
 	}
 
-	titanium::KrollModule::dispose(isolate);
+	titanium::KrollModule::dispose();
 }
 
-Local<FunctionTemplate> SpeakerphoneModule::getProxyTemplate(Isolate* isolate)
+Handle<FunctionTemplate> SpeakerphoneModule::getProxyTemplate()
 {
 	if (!proxyTemplate.IsEmpty()) {
-		return proxyTemplate.Get(isolate);
+		return proxyTemplate;
 	}
 
 	LOGD(TAG, "GetProxyTemplate");
 
 	javaClass = titanium::JNIUtil::findClass("ti/speakerphone/SpeakerphoneModule");
-	EscapableHandleScope scope(isolate);
+	HandleScope scope;
 
 	// use symbol over string for efficiency
-	Local<String> nameSymbol = NEW_SYMBOL(isolate, "Speakerphone");
+	Handle<String> nameSymbol = String::NewSymbol("Speakerphone");
 
-	Local<FunctionTemplate> t = titanium::Proxy::inheritProxyTemplate(isolate,
-		titanium::KrollModule::getProxyTemplate(isolate)
+	Handle<FunctionTemplate> t = titanium::Proxy::inheritProxyTemplate(
+		titanium::KrollModule::getProxyTemplate()
 , javaClass, nameSymbol);
 
-	proxyTemplate.Reset(isolate, t);
-	t->Set(titanium::Proxy::inheritSymbol.Get(isolate),
-		FunctionTemplate::New(isolate, titanium::Proxy::inherit<SpeakerphoneModule>)->GetFunction());
+	proxyTemplate = Persistent<FunctionTemplate>::New(t);
+	proxyTemplate->Set(titanium::Proxy::inheritSymbol,
+		FunctionTemplate::New(titanium::Proxy::inherit<SpeakerphoneModule>)->GetFunction());
 
-	titanium::ProxyFactory::registerProxyPair(javaClass, *t);
+	titanium::ProxyFactory::registerProxyPair(javaClass, *proxyTemplate);
 
 	// Method bindings --------------------------------------------------------
-	titanium::SetProtoMethod(isolate, t, "setSpeakerphoneOn", SpeakerphoneModule::setSpeakerphoneOn);
-	titanium::SetProtoMethod(isolate, t, "isSpeakerphoneOn", SpeakerphoneModule::isSpeakerphoneOn);
-	titanium::SetProtoMethod(isolate, t, "toggleSpeakerphoneOn", SpeakerphoneModule::toggleSpeakerphoneOn);
+	DEFINE_PROTOTYPE_METHOD(proxyTemplate, "setSpeakerphoneOn", SpeakerphoneModule::setSpeakerphoneOn);
+	DEFINE_PROTOTYPE_METHOD(proxyTemplate, "isSpeakerphoneOn", SpeakerphoneModule::isSpeakerphoneOn);
+	DEFINE_PROTOTYPE_METHOD(proxyTemplate, "toggleSpeakerphoneOn", SpeakerphoneModule::toggleSpeakerphoneOn);
 
-	Local<ObjectTemplate> prototypeTemplate = t->PrototypeTemplate();
-	Local<ObjectTemplate> instanceTemplate = t->InstanceTemplate();
+	Local<ObjectTemplate> prototypeTemplate = proxyTemplate->PrototypeTemplate();
+	Local<ObjectTemplate> instanceTemplate = proxyTemplate->InstanceTemplate();
 
 	// Delegate indexed property get and set to the Java proxy.
 	instanceTemplate->SetIndexedPropertyHandler(titanium::Proxy::getIndexedProperty,
@@ -101,20 +105,18 @@ Local<FunctionTemplate> SpeakerphoneModule::getProxyTemplate(Isolate* isolate)
 
 	// Accessors --------------------------------------------------------------
 
-	return scope.Escape(t);
+	return proxyTemplate;
 }
 
 // Methods --------------------------------------------------------------------
-void SpeakerphoneModule::setSpeakerphoneOn(const FunctionCallbackInfo<Value>& args)
+Handle<Value> SpeakerphoneModule::setSpeakerphoneOn(const Arguments& args)
 {
 	LOGD(TAG, "setSpeakerphoneOn()");
-	Isolate* isolate = args.GetIsolate();
-	HandleScope scope(isolate);
+	HandleScope scope;
 
 	JNIEnv *env = titanium::JNIScope::getEnv();
 	if (!env) {
-		titanium::JSException::GetJNIEnvironmentError(isolate);
-		return;
+		return titanium::JSException::GetJNIEnvironmentError();
 	}
 	static jmethodID methodID = NULL;
 	if (!methodID) {
@@ -122,24 +124,16 @@ void SpeakerphoneModule::setSpeakerphoneOn(const FunctionCallbackInfo<Value>& ar
 		if (!methodID) {
 			const char *error = "Couldn't find proxy method 'setSpeakerphoneOn' with signature '(Z)V'";
 			LOGE(TAG, error);
-				titanium::JSException::Error(isolate, error);
-				return;
+				return titanium::JSException::Error(error);
 		}
 	}
 
-	Local<Object> holder = args.Holder();
-	// If holder isn't the JavaObject wrapper we expect, look up the prototype chain
-	if (!JavaObject::isJavaObject(holder)) {
-		holder = holder->FindInstanceInPrototypeChain(getProxyTemplate(isolate));
-	}
-
-	titanium::Proxy* proxy = titanium::Proxy::unwrap(holder);
+	titanium::Proxy* proxy = titanium::Proxy::unwrap(args.Holder());
 
 	if (args.Length() < 1) {
 		char errorStringBuffer[100];
 		sprintf(errorStringBuffer, "setSpeakerphoneOn: Invalid number of arguments. Expected 1 but got %d", args.Length());
-		titanium::JSException::Error(isolate, errorStringBuffer);
-		return;
+		return ThrowException(Exception::Error(String::New(errorStringBuffer)));
 	}
 
 	jvalue jArguments[1];
@@ -150,16 +144,14 @@ void SpeakerphoneModule::setSpeakerphoneOn(const FunctionCallbackInfo<Value>& ar
 	if (!args[0]->IsBoolean() && !args[0]->IsNull()) {
 		const char *error = "Invalid value, expected type Boolean.";
 		LOGE(TAG, error);
-		titanium::JSException::Error(isolate, error);
-		return;
+		return titanium::JSException::Error(error);
 	}
 	
-
+	
 	if (!args[0]->IsNull()) {
-		Local<Boolean> arg_0 = args[0]->ToBoolean(isolate);
+		Local<Boolean> arg_0 = args[0]->ToBoolean();
 		jArguments[0].z =
-			titanium::TypeConverter::jsBooleanToJavaBoolean(
-				env, arg_0);
+			titanium::TypeConverter::jsBooleanToJavaBoolean(env, arg_0);
 	} else {
 		jArguments[0].z = NULL;
 	}
@@ -174,26 +166,24 @@ void SpeakerphoneModule::setSpeakerphoneOn(const FunctionCallbackInfo<Value>& ar
 
 
 	if (env->ExceptionCheck()) {
-		titanium::JSException::fromJavaException(isolate);
+		titanium::JSException::fromJavaException();
 		env->ExceptionClear();
 	}
 
 
 
 
-	args.GetReturnValue().Set(v8::Undefined(isolate));
+	return v8::Undefined();
 
 }
-void SpeakerphoneModule::isSpeakerphoneOn(const FunctionCallbackInfo<Value>& args)
+Handle<Value> SpeakerphoneModule::isSpeakerphoneOn(const Arguments& args)
 {
 	LOGD(TAG, "isSpeakerphoneOn()");
-	Isolate* isolate = args.GetIsolate();
-	HandleScope scope(isolate);
+	HandleScope scope;
 
 	JNIEnv *env = titanium::JNIScope::getEnv();
 	if (!env) {
-		titanium::JSException::GetJNIEnvironmentError(isolate);
-		return;
+		return titanium::JSException::GetJNIEnvironmentError();
 	}
 	static jmethodID methodID = NULL;
 	if (!methodID) {
@@ -201,18 +191,11 @@ void SpeakerphoneModule::isSpeakerphoneOn(const FunctionCallbackInfo<Value>& arg
 		if (!methodID) {
 			const char *error = "Couldn't find proxy method 'isSpeakerphoneOn' with signature '()Z'";
 			LOGE(TAG, error);
-				titanium::JSException::Error(isolate, error);
-				return;
+				return titanium::JSException::Error(error);
 		}
 	}
 
-	Local<Object> holder = args.Holder();
-	// If holder isn't the JavaObject wrapper we expect, look up the prototype chain
-	if (!JavaObject::isJavaObject(holder)) {
-		holder = holder->FindInstanceInPrototypeChain(getProxyTemplate(isolate));
-	}
-
-	titanium::Proxy* proxy = titanium::Proxy::unwrap(holder);
+	titanium::Proxy* proxy = titanium::Proxy::unwrap(args.Holder());
 
 	jvalue* jArguments = 0;
 
@@ -228,29 +211,27 @@ void SpeakerphoneModule::isSpeakerphoneOn(const FunctionCallbackInfo<Value>& arg
 
 
 	if (env->ExceptionCheck()) {
-		Local<Value> jsException = titanium::JSException::fromJavaException(isolate);
+		Handle<Value> jsException = titanium::JSException::fromJavaException();
 		env->ExceptionClear();
-		return;
+		return jsException;
 	}
 
 
-	Local<Boolean> v8Result = titanium::TypeConverter::javaBooleanToJsBoolean(isolate, env, jResult);
+	Handle<Boolean> v8Result = titanium::TypeConverter::javaBooleanToJsBoolean(env, jResult);
 
 
 
-	args.GetReturnValue().Set(v8Result);
+	return v8Result;
 
 }
-void SpeakerphoneModule::toggleSpeakerphoneOn(const FunctionCallbackInfo<Value>& args)
+Handle<Value> SpeakerphoneModule::toggleSpeakerphoneOn(const Arguments& args)
 {
 	LOGD(TAG, "toggleSpeakerphoneOn()");
-	Isolate* isolate = args.GetIsolate();
-	HandleScope scope(isolate);
+	HandleScope scope;
 
 	JNIEnv *env = titanium::JNIScope::getEnv();
 	if (!env) {
-		titanium::JSException::GetJNIEnvironmentError(isolate);
-		return;
+		return titanium::JSException::GetJNIEnvironmentError();
 	}
 	static jmethodID methodID = NULL;
 	if (!methodID) {
@@ -258,18 +239,11 @@ void SpeakerphoneModule::toggleSpeakerphoneOn(const FunctionCallbackInfo<Value>&
 		if (!methodID) {
 			const char *error = "Couldn't find proxy method 'toggleSpeakerphoneOn' with signature '()V'";
 			LOGE(TAG, error);
-				titanium::JSException::Error(isolate, error);
-				return;
+				return titanium::JSException::Error(error);
 		}
 	}
 
-	Local<Object> holder = args.Holder();
-	// If holder isn't the JavaObject wrapper we expect, look up the prototype chain
-	if (!JavaObject::isJavaObject(holder)) {
-		holder = holder->FindInstanceInPrototypeChain(getProxyTemplate(isolate));
-	}
-
-	titanium::Proxy* proxy = titanium::Proxy::unwrap(holder);
+	titanium::Proxy* proxy = titanium::Proxy::unwrap(args.Holder());
 
 	jvalue* jArguments = 0;
 
@@ -283,19 +257,19 @@ void SpeakerphoneModule::toggleSpeakerphoneOn(const FunctionCallbackInfo<Value>&
 
 
 	if (env->ExceptionCheck()) {
-		titanium::JSException::fromJavaException(isolate);
+		titanium::JSException::fromJavaException();
 		env->ExceptionClear();
 	}
 
 
 
 
-	args.GetReturnValue().Set(v8::Undefined(isolate));
+	return v8::Undefined();
 
 }
 
 // Dynamic property accessors -------------------------------------------------
 
 
-} // speakerphone
-} // ti
+		} // speakerphone
+		} // ti

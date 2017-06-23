@@ -1,6 +1,6 @@
 /**
  * Appcelerator Titanium Mobile
- * Copyright (c) 2011-2016 by Appcelerator, Inc. All Rights Reserved.
+ * Copyright (c) 2011 by Appcelerator, Inc. All Rights Reserved.
  * Licensed under the terms of the Apache Public License
  * Please see the LICENSE included with this distribution for details.
  *
@@ -10,8 +10,6 @@
 #include <v8.h>
 
 #include <AndroidUtil.h>
-#include <JNIUtil.h>
-#include <JSException.h>
 #include <KrollBindings.h>
 #include <V8Util.h>
 
@@ -24,33 +22,26 @@ using namespace v8;
 
 static Persistent<Object> bindingCache;
 
-static void Speakerphone_getBinding(const FunctionCallbackInfo<Value>& args)
+static Handle<Value> Speakerphone_getBinding(const Arguments& args)
 {
-	Isolate* isolate = args.GetIsolate();
-	EscapableHandleScope scope(isolate);
+	HandleScope scope;
 
 	if (args.Length() == 0) {
-		titanium::JSException::Error(isolate, "Speakerphone.getBinding requires 1 argument: binding");
-		args.GetReturnValue().Set(scope.Escape(Undefined(isolate)));
-		return;
+		return ThrowException(Exception::Error(String::New("Speakerphone.getBinding requires 1 argument: binding")));
 	}
 
-	Local<Object> cache;
 	if (bindingCache.IsEmpty()) {
-		cache = Object::New(isolate);
-		bindingCache.Reset(isolate, cache);
-	} else {
-		cache = bindingCache.Get(isolate);
+		bindingCache = Persistent<Object>::New(Object::New());
 	}
 
-	Local<String> binding = args[0]->ToString(isolate);
+	Handle<String> binding = args[0]->ToString();
 
-	if (cache->Has(binding)) {
-		args.GetReturnValue().Set(scope.Escape(cache->Get(binding)));
-		return;
+	if (bindingCache->Has(binding)) {
+		return bindingCache->Get(binding);
 	}
 
-	titanium::Utf8Value bindingValue(binding);
+	String::Utf8Value bindingValue(binding);
+
 	LOGD(TAG, "Looking up binding: %s", *bindingValue);
 
 	titanium::bindings::BindEntry *extBinding = ::SpeakerphoneBindings::lookupGeneratedInit(
@@ -58,57 +49,55 @@ static void Speakerphone_getBinding(const FunctionCallbackInfo<Value>& args)
 
 	if (!extBinding) {
 		LOGE(TAG, "Couldn't find binding: %s, returning undefined", *bindingValue);
-		args.GetReturnValue().Set(scope.Escape(Undefined(isolate)));
-		return;
+		return Undefined();
 	}
 
-	Local<Object> exports = Object::New(isolate);
-	extBinding->bind(exports, isolate->GetCurrentContext());
-	cache->Set(binding, exports);
+	Handle<Object> exports = Object::New();
+	extBinding->bind(exports);
+	bindingCache->Set(binding, exports);
 
-	args.GetReturnValue().Set(scope.Escape(exports));
-	return;
+	return exports;
 }
 
-static void Speakerphone_init(Local<Object> exports, Local<Context> context)
+static void Speakerphone_init(Handle<Object> exports)
 {
-	Isolate* isolate = context->GetIsolate();
-	HandleScope scope(isolate);
+	HandleScope scope;
 
 	for (int i = 0; titanium::natives[i].name; ++i) {
-		Local<String> name = String::NewFromUtf8(isolate, titanium::natives[i].name);
-		Local<String> source = IMMUTABLE_STRING_LITERAL_FROM_ARRAY(isolate,
+		Local<String> name = String::New(titanium::natives[i].name);
+		Handle<String> source = IMMUTABLE_STRING_LITERAL_FROM_ARRAY(
 			titanium::natives[i].source, titanium::natives[i].source_length);
 
 		exports->Set(name, source);
 	}
-	Local<FunctionTemplate> constructor = FunctionTemplate::New(isolate, Speakerphone_getBinding);
-	exports->Set(String::NewFromUtf8(isolate, "getBinding"), constructor->GetFunction(context).ToLocalChecked());
+
+	exports->Set(String::New("getBinding"), FunctionTemplate::New(Speakerphone_getBinding)->GetFunction());
 }
 
-static void Speakerphone_dispose(Isolate* isolate)
+static void Speakerphone_dispose()
 {
-	HandleScope scope(isolate);
+	HandleScope scope;
 	if (bindingCache.IsEmpty()) {
 		return;
 	}
 
-	Local<Array> propertyNames = bindingCache.Get(isolate)->GetPropertyNames();
+	Local<Array> propertyNames = bindingCache->GetPropertyNames();
 	uint32_t length = propertyNames->Length();
 
 	for (uint32_t i = 0; i < length; ++i) {
-		titanium::Utf8Value binding(propertyNames->Get(i));
+		String::Utf8Value binding(propertyNames->Get(i));
 		int bindingLength = binding.length();
 
 		titanium::bindings::BindEntry *extBinding =
 			::SpeakerphoneBindings::lookupGeneratedInit(*binding, bindingLength);
 
 		if (extBinding && extBinding->dispose) {
-			extBinding->dispose(isolate);
+			extBinding->dispose();
 		}
 	}
 
-	bindingCache.Reset();
+	bindingCache.Dispose();
+	bindingCache = Persistent<Object>();
 }
 
 static titanium::bindings::BindEntry SpeakerphoneBinding = {
